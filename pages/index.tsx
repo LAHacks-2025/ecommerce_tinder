@@ -16,9 +16,8 @@ const Home: NextPage = () => {
   const [history, setHistory] = useState<HistoryType[]>([]);
   const activeIndex = cards.length - 1;
   const [isProcessingSwipe, setIsProcessingSwipe] = useState(false);
-  const removingCardRef = useRef<string | null>(null);
 
-  // Single active card ref instead of an array
+  // Single active card ref
   const activeCardRef = useRef<any>(null);
 
   // Debug the processing state
@@ -34,7 +33,6 @@ const Home: NextPage = () => {
       timeoutId = setTimeout(() => {
         console.log("Force resetting processing state after timeout");
         setIsProcessingSwipe(false);
-        removingCardRef.current = null;
       }, 2000); // 2 second safety timeout
     }
     
@@ -43,32 +41,26 @@ const Home: NextPage = () => {
     };
   }, [isProcessingSwipe]);
 
+  // This useEffect ensures the state is properly reset when cards change
+  useEffect(() => {
+    // Reset swipe processing state when active card changes
+    if (cards.length > 0) {
+      console.log("Active card changed, ensuring processing state is reset");
+      setTimeout(() => {
+        setIsProcessingSwipe(false);
+      }, 100);
+    }
+  }, [cards.length]);
+
   const removeCard = (oldCard: CardType, swipe: SwipeType) => {
     console.log("Removing card:", oldCard.id, "with swipe type:", swipe);
     
-    // Only proceed if not already removing this card
-    if (removingCardRef.current === oldCard.id) {
-      console.log("Already removing this card, skipping");
-      return;
-    }
-    
-    // Mark this card as being removed
-    removingCardRef.current = oldCard.id;
-    
-    // Update history and result counter
+    // First update the history and result
     setHistory(current => [...current, { ...oldCard, swipe }]);
     setResult(current => ({ ...current, [swipe]: current[swipe] + 1 }));
     
-    // Update cards immediately but reset processing state after a delay
-    // This ensures the next card will be interactive after the animation
+    // Then remove the card from the stack
     setCards(current => current.filter(card => card.id !== oldCard.id));
-    
-    // Short delay to ensure animation completes before resetting state
-    setTimeout(() => {
-      removingCardRef.current = null;
-      setIsProcessingSwipe(false);
-      console.log("Processing state reset after card removal");
-    }, 100);
   };
   
   const handleSwipe = (swipeType: SwipeType) => {
@@ -82,23 +74,16 @@ const Home: NextPage = () => {
       return;
     }
     
-    if (removingCardRef.current) {
-      console.log("A card is being removed, skipping button action");
-      return;
-    }
-    
     console.log("Button swipe triggered:", swipeType);
     console.log("Active card ref exists:", !!activeCardRef.current);
     
     if (!activeCardRef.current) {
       console.warn("No active card ref found");
-      setIsProcessingSwipe(false);
       return;
     }
     
     if (typeof activeCardRef.current.handleManualSwipe !== 'function') {
       console.warn("Missing handleManualSwipe method on card ref");
-      setIsProcessingSwipe(false);
       return;
     }
     
@@ -110,17 +95,15 @@ const Home: NextPage = () => {
         .catch((error: any) => {
           console.error("Button swipe error:", error);
           setIsProcessingSwipe(false);
-          removingCardRef.current = null;
         });
     } catch (error) {
       console.error("Error triggering button swipe:", error);
       setIsProcessingSwipe(false);
-      removingCardRef.current = null;
     }
   };
 
   const undoSwipe = () => {
-    if (isProcessingSwipe || history.length === 0 || removingCardRef.current) {
+    if (isProcessingSwipe || history.length === 0) {
       return;
     }
     
@@ -144,7 +127,6 @@ const Home: NextPage = () => {
     setCards(CARDS);
     setHistory([]);
     setResult({ like: 0, nope: 0, superlike: 0 });
-    removingCardRef.current = null;
     setIsProcessingSwipe(false);
   };
   
@@ -172,19 +154,20 @@ const Home: NextPage = () => {
             />
           ))}
         </AnimatePresence>
+        
+        {/* Empty state - now inside the card container for proper centering */}
+        {cards.length === 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-3xl shadow-xl">
+            <span className="text-gray-600 text-2xl mb-6">End of Stack</span>
+            <button 
+              onClick={resetDeck}
+              className="bg-[#F8B64C] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-[#E7A43C] transition-colors"
+            >
+              Restart
+            </button>
+          </div>
+        )}
       </div>
-      
-      {cards.length === 0 ? (
-        <div className="flex flex-col items-center">
-          <span className="text-gray-600 text-xl mb-4">End of Stack</span>
-          <button 
-            onClick={resetDeck}
-            className="bg-[#F8B64C] text-white px-6 py-3 rounded-full font-bold"
-          >
-            Restart
-          </button>
-        </div>
-      ) : null}
       
       <footer className="absolute bottom-10 flex items-center justify-center w-full space-x-6">
         {cards.length > 0 && (
@@ -228,12 +211,12 @@ const Home: NextPage = () => {
       
       {history.length > 0 && (
         <button
-          className={`absolute bottom-32 bg-white shadow-md rounded-full w-12 h-12 flex items-center justify-center text-gray-600 transition-transform hover:scale-110 ${isProcessingSwipe ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+          className={`absolute bottom-28 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full w-16 h-16 flex items-center justify-center text-gray-600 transition-transform hover:scale-110 ${isProcessingSwipe ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
           onClick={undoSwipe}
           disabled={isProcessingSwipe}
           aria-label="Undo"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 12h12a6 6 0 0 1 0 12H7"></path>
             <path d="M7 8 3 12l4 4"></path>
           </svg>

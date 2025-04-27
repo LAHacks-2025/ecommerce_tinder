@@ -12,10 +12,15 @@ const Card = forwardRef<any, ExtendedCardProps>(({ card, removeCard, active, set
   const [rotation, setRotation] = useState(0);
   const [swipeDirection, setSwipeDirection] = useState<SwipeType | null>(null);
   const controls = useAnimation();
+  const [isAnimating, setIsAnimating] = useState(false);
 
-  // Wrap the swipe function to ensure consistent behavior
+  // Unified swipe function for both button and manual swipes
   const performSwipe = useCallback((swipeType: SwipeType, x: number, y: number, rotate: number) => {
+    // Prevent multiple swipe actions
+    if (isAnimating) return Promise.resolve();
+    
     console.log(`Card ${card.id}: Performing ${swipeType} swipe`);
+    setIsAnimating(true);
     setIsProcessingSwipe?.(true);
     setSwipeDirection(swipeType);
     setLeaveX(x);
@@ -31,16 +36,18 @@ const Card = forwardRef<any, ExtendedCardProps>(({ card, removeCard, active, set
       transition: { duration: 0.4, ease: "easeOut" }
     }).then(() => {
       console.log(`Card ${card.id}: Animation complete, removing card`);
+      setIsAnimating(false);
       removeCard(card, swipeType);
       return Promise.resolve();
     }).catch((error) => {
       console.error(`Card ${card.id}: Animation error:`, error);
+      setIsAnimating(false);
       setIsProcessingSwipe?.(false);
       return Promise.reject(error);
     });
-  }, [card, controls, removeCard, setIsProcessingSwipe]);
+  }, [card, controls, removeCard, setIsProcessingSwipe, isAnimating]);
 
-  // Make sure the handleManualSwipe function is properly defined
+  // Make handleManualSwipe available to parent component
   useImperativeHandle(ref, () => ({
     handleManualSwipe: (swipeType: SwipeType) => {
       console.log(`Card ${card.id}: Button swipe triggered for ${swipeType}`);
@@ -57,9 +64,12 @@ const Card = forwardRef<any, ExtendedCardProps>(({ card, removeCard, active, set
       setIsProcessingSwipe?.(false);
       return Promise.resolve();
     }
-  }), [card.id, performSwipe, setIsProcessingSwipe]);
+  }), [card.id, performSwipe]);
 
   const onDrag = (_e: any, info: PanInfo) => {
+    // Don't update during animation
+    if (isAnimating) return;
+    
     const xOffset = info.offset.x;
     const yOffset = info.offset.y;
     
@@ -79,9 +89,10 @@ const Card = forwardRef<any, ExtendedCardProps>(({ card, removeCard, active, set
   };
 
   const onDragEnd = (_e: any, info: PanInfo) => {
+    // Don't process multiple swipes
+    if (isAnimating) return;
+    
     console.log(`Card ${card.id}: Drag ended, analyzing direction`);
-    // Always notify parent about swipe processing
-    setIsProcessingSwipe?.(true);
     
     try {
       // Handle superlike (up swipe)
@@ -112,6 +123,7 @@ const Card = forwardRef<any, ExtendedCardProps>(({ card, removeCard, active, set
       setSwipeDirection(null);
     } catch (error) {
       console.error(`Card ${card.id}: Error during manual swipe:`, error);
+      setIsAnimating(false);
       setIsProcessingSwipe?.(false);
     }
   };
@@ -122,20 +134,14 @@ const Card = forwardRef<any, ExtendedCardProps>(({ card, removeCard, active, set
   
   return (
     <motion.div
-      drag={true}
+      drag={!isAnimating}
       dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
       dragElastic={0.7}
       onDrag={onDrag}
       onDragEnd={onDragEnd}
       initial={{ scale: 0.95, opacity: 0.8 }}
-      animate={{
-        scale: 1,
-        opacity: 1, 
-        x: 0, 
-        y: 0, 
-        rotate: 0,
-        transition: { duration: 0.3 }
-      }}
+      animate={controls}
+      style={{ rotate: rotation }}
       exit={{
         x: leaveX,
         y: leaveY,
@@ -156,36 +162,61 @@ const Card = forwardRef<any, ExtendedCardProps>(({ card, removeCard, active, set
 Card.displayName = "Card";
 
 const BeerCard: React.FC<{ card: any, swipeDirection: SwipeType | null }> = ({ card, swipeDirection }) => {
+  // Ensure description text is capped to a reasonable length
+  const truncateDescription = (text: string, maxLength = 140) => {
+    if (!text) return '';
+    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
+  };
+  
   return (
-    <>
-      <div className="relative w-full h-[480px]">
-        <img 
-          src={card.image} 
-          alt={card.name} 
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute top-4 right-4 bg-white rounded-full px-4 py-2 text-[#F8B64C] font-bold shadow-md">
-          ${card.price.toFixed(2)}
+    <div className="flex flex-col h-full">
+      {/* Image container with clean, white background */}
+      <div className="relative w-full h-[380px] bg-white">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <img 
+            src={card.image} 
+            alt={card.name} 
+            className="w-full h-full object-contain" 
+          />
         </div>
         
+        {/* ABV tag - moved from bottom to top */}
+        <div className="absolute top-4 right-4 bg-white rounded-full px-4 py-2 font-medium text-gray-700 shadow-md z-10">
+          ABV: {card.abv}
+        </div>
+        
+        {/* Swipe indicator */}
         {swipeDirection && (
-          <div className={`absolute ${getSwipeIndicatorPosition(swipeDirection)} ${getSwipeIndicatorColor(swipeDirection)} rounded-lg px-4 py-2 font-bold text-white rotate-${getSwipeIndicatorRotation(swipeDirection)} border-2 border-white shadow-lg text-2xl`}>
+          <div className={`absolute z-20 ${getSwipeIndicatorPosition(swipeDirection)} ${getSwipeIndicatorColor(swipeDirection)} rounded-lg px-4 py-2 font-bold text-white rotate-${getSwipeIndicatorRotation(swipeDirection)} border-2 border-white shadow-lg text-2xl`}>
             {getSwipeLabel(swipeDirection)}
           </div>
         )}
       </div>
-      <div className="p-8 flex flex-col flex-grow bg-white">
-        <h2 className="text-4xl font-bold text-gray-800 mb-3">{card.name}</h2>
-        <p className="text-lg text-gray-600 mb-6 leading-relaxed">{card.description}</p>
+      
+      {/* Content container - flex grow to fill remaining space */}
+      <div className="flex flex-col flex-grow p-6 bg-white">
+        {/* Title */}
+        <h2 className="text-3xl font-bold text-gray-800 mb-2 line-clamp-1">{card.name}</h2>
+        
+        {/* Description - fixed height with ellipsis for overflow */}
+        <div className="h-[120px] overflow-hidden mb-4">
+          <p className="text-base text-gray-600 leading-relaxed">
+            {truncateDescription(card.description)}
+          </p>
+        </div>
+        
+        {/* Price - moved from top to bottom, made larger */}
         <div className="mt-auto flex justify-between items-center">
-          <div className="text-gray-700 bg-gray-100 px-4 py-2 rounded-full font-medium text-base">ABV: {card.abv}</div>
+          <div className="text-[#F8B64C] bg-white border-2 border-[#F8B64C] px-5 py-2 rounded-full font-bold text-base">
+            ${card.price.toFixed(2)}
+          </div>
           <div className="text-gray-700 flex items-center bg-gray-100 px-4 py-2 rounded-full">
             <span className="text-yellow-500 mr-2 text-lg">★</span>
-            <span className="font-medium">{card.rating.toFixed(1)}</span>
+            <span className="font-medium text-sm">{card.rating.toFixed(1)}</span>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

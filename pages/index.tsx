@@ -5,8 +5,10 @@ import { CardType, HistoryType, ResultType, SwipeType } from "types";
 import CARDS from "@data/cards";
 import Card from "@components/Card";
 import Head from "next/head";
+import HomePage from "@components/HomePage";
 
 const Home: NextPage = () => {
+  const [isHomeScreen, setIsHomeScreen] = useState(true);
   const [cards, setCards] = useState(CARDS);
   const [result, setResult] = useState<ResultType>({
     like: 0,
@@ -16,6 +18,7 @@ const Home: NextPage = () => {
   const [history, setHistory] = useState<HistoryType[]>([]);
   const activeIndex = cards.length - 1;
   const [isProcessingSwipe, setIsProcessingSwipe] = useState(false);
+  const [searchCategory, setSearchCategory] = useState("");
 
   // Single active card ref
   const activeCardRef = useRef<any>(null);
@@ -129,16 +132,48 @@ const Home: NextPage = () => {
     setResult({ like: 0, nope: 0, superlike: 0 });
     setIsProcessingSwipe(false);
   };
+
+  const handleStartBrowsing = () => {
+    setIsHomeScreen(false);
+  };
+
+  const handleSearch = (category: string) => {
+    setSearchCategory(category);
+    setIsHomeScreen(false);
+    // Here you would normally filter cards based on category
+    // For now, we'll just use all cards
+    console.log("Searching for category:", category);
+  };
+  
+  const handleBackToHome = () => {
+    // Save current state before going back home
+    setIsHomeScreen(true);
+  };
+  
+  if (isHomeScreen) {
+    return (
+      <>
+        <Head>
+          <title>Whimsical - Discover Products</title>
+        </Head>
+        <HomePage 
+          onStartBrowsing={handleStartBrowsing} 
+          onSearch={handleSearch} 
+        />
+      </>
+    );
+  }
   
   return (
     <div className="relative flex flex-col justify-center items-center w-full h-screen gradient">
       <Head>
-        <title>Whimsical - Beer Selection</title>
+        <title>Whimsical - Product Discovery</title>
       </Head>
       
       <div className="absolute top-8 flex items-center">
-        <span className="text-[#F8B64C] text-3xl mr-2">🍺</span>
+        <span className="text-[#F8B64C] text-3xl mr-2">🛍️</span>
         <h1 className="text-3xl font-bold text-[#333]">Whimsical</h1>
+        {searchCategory && <span className="ml-4 text-lg text-gray-500">Category: {searchCategory}</span>}
       </div>
       
       <div className="relative w-[400px] h-[680px]">
@@ -159,15 +194,30 @@ const Home: NextPage = () => {
         {cards.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-3xl shadow-xl">
             <span className="text-gray-600 text-2xl mb-6">End of Stack</span>
-            <button 
-              onClick={resetDeck}
-              className="bg-[#F8B64C] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-[#E7A43C] transition-colors"
-            >
-              Restart
-            </button>
+            <div className="flex gap-4">
+              <button 
+                onClick={resetDeck}
+                className="bg-[#F8B64C] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-[#E7A43C] transition-colors"
+              >
+                Restart
+              </button>
+              <button 
+                onClick={() => setIsHomeScreen(true)}
+                className="bg-gray-200 text-gray-800 px-8 py-4 rounded-full font-bold text-lg hover:bg-gray-300 transition-colors"
+              >
+                Home
+              </button>
+            </div>
           </div>
         )}
       </div>
+      
+      <button
+        className="absolute top-6 right-6 bg-white shadow-md rounded-full px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors z-10"
+        onClick={handleBackToHome}
+      >
+        Back to Home
+      </button>
       
       <footer className="absolute bottom-10 flex items-center justify-center w-full space-x-6">
         {cards.length > 0 && (

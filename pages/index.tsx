@@ -19,6 +19,7 @@ const Home: NextPage = () => {
   const activeIndex = cards.length - 1;
   const [isProcessingSwipe, setIsProcessingSwipe] = useState(false);
   const [searchCategory, setSearchCategory] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   // Single active card ref
   const activeCardRef = useRef<any>(null);
@@ -137,12 +138,46 @@ const Home: NextPage = () => {
     setIsHomeScreen(false);
   };
 
-  const handleSearch = (category: string) => {
+  const handleSearch = async (category: string) => {
     setSearchCategory(category);
-    setIsHomeScreen(false);
-    // Here you would normally filter cards based on category
-    // For now, we'll just use all cards
-    console.log("Searching for category:", category);
+    setIsLoading(true);
+    
+    try {
+      // Call our internal Next.js API route instead of the external API directly
+      console.log("Calling internal API proxy with query:", category);
+      
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: category
+        }),
+      });
+      
+      if (!response.ok) {
+        console.error('API Error:', response.status, response.statusText);
+        throw new Error(`API error: ${response.status}`);
+      }
+      
+      const responseJson = await response.json();
+      console.log("API response:", responseJson);
+      
+      // Use the data from the proxy API or fall back to default cards
+      if (responseJson.data && Array.isArray(responseJson.data) && responseJson.data.length > 0) {
+        setCards(responseJson.data);
+      } else {
+        console.warn("No usable data returned from API, using fallback data");
+        setCards(CARDS);
+      }
+    } catch (error) {
+      console.error("Error fetching search results:", error);
+      setCards(CARDS);
+    } finally {
+      setIsLoading(false);
+      setIsHomeScreen(false);
+    }
   };
   
   const handleBackToHome = () => {
@@ -177,21 +212,28 @@ const Home: NextPage = () => {
       </div>
       
       <div className="relative w-[400px] h-[680px]">
-        <AnimatePresence>
-          {cards.map((card, index) => (
-            <Card
-              key={card.id}
-              active={index === activeIndex}
-              removeCard={removeCard}
-              card={card}
-              ref={index === activeIndex ? activeCardRef : null}
-              setIsProcessingSwipe={setIsProcessingSwipe}
-            />
-          ))}
-        </AnimatePresence>
+        {isLoading ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-3xl shadow-xl">
+            <span className="text-gray-600 text-xl mb-4">Loading...</span>
+            <div className="w-10 h-10 border-4 border-[#F8B64C] border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        ) : (
+          <AnimatePresence>
+            {cards.map((card, index) => (
+              <Card
+                key={card.id}
+                active={index === activeIndex}
+                removeCard={removeCard}
+                card={card}
+                ref={index === activeIndex ? activeCardRef : null}
+                setIsProcessingSwipe={setIsProcessingSwipe}
+              />
+            ))}
+          </AnimatePresence>
+        )}
         
         {/* Empty state - now inside the card container for proper centering */}
-        {cards.length === 0 && (
+        {!isLoading && cards.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-3xl shadow-xl">
             <span className="text-gray-600 text-2xl mb-6">End of Stack</span>
             <div className="flex gap-4">

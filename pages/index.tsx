@@ -6,8 +6,17 @@ import CARDS from "@data/cards";
 import Card from "@components/Card";
 import Head from "next/head";
 import HomePage from "@components/HomePage";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faHome, faShoppingCart } from "@fortawesome/free-solid-svg-icons";
+import { useRouter } from 'next/router';
+
+// Define a CartItem type
+type CartItem = CardType & {
+  quantity: number;
+};
 
 const Home: NextPage = () => {
+  const router = useRouter();
   const [isHomeScreen, setIsHomeScreen] = useState(true);
   const [cards, setCards] = useState(CARDS);
   const [result, setResult] = useState<ResultType>({
@@ -20,9 +29,30 @@ const Home: NextPage = () => {
   const [isProcessingSwipe, setIsProcessingSwipe] = useState(false);
   const [searchCategory, setSearchCategory] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  // Add cart state
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   // Single active card ref
   const activeCardRef = useRef<any>(null);
+
+  // Save cart to localStorage when it changes
+  useEffect(() => {
+    if (cartItems.length > 0) {
+      localStorage.setItem('cartItems', JSON.stringify(cartItems));
+    }
+  }, [cartItems]);
+
+  // Load cart from localStorage on initial load
+  useEffect(() => {
+    const savedCart = localStorage.getItem('cartItems');
+    if (savedCart) {
+      try {
+        setCartItems(JSON.parse(savedCart));
+      } catch (e) {
+        console.error('Failed to parse saved cart:', e);
+      }
+    }
+  }, []);
 
   // Debug the processing state
   useEffect(() => {
@@ -63,8 +93,36 @@ const Home: NextPage = () => {
     setHistory(current => [...current, { ...oldCard, swipe }]);
     setResult(current => ({ ...current, [swipe]: current[swipe] + 1 }));
     
+    // Add to cart if it's a superlike
+    if (swipe === "superlike") {
+      addToCart(oldCard);
+    }
+    
     // Then remove the card from the stack
     setCards(current => current.filter(card => card.id !== oldCard.id));
+  };
+  
+  // Add a product to cart
+  const addToCart = (product: CardType) => {
+    setCartItems(currentCart => {
+      // Check if the item is already in the cart
+      const existingItemIndex = currentCart.findIndex(item => item.id === product.id);
+      
+      if (existingItemIndex >= 0) {
+        // Item exists, increase quantity
+        const updatedCart = [...currentCart];
+        updatedCart[existingItemIndex].quantity += 1;
+        return updatedCart;
+      } else {
+        // Item doesn't exist, add it with quantity 1
+        return [...currentCart, { ...product, quantity: 1 }];
+      }
+    });
+  };
+  
+  // Navigate to cart page
+  const goToCart = () => {
+    router.push('/cart');
   };
   
   const handleSwipe = (swipeType: SwipeType) => {
@@ -205,10 +263,38 @@ const Home: NextPage = () => {
         <title>Whimsical - Product Discovery</title>
       </Head>
       
-      <div className="absolute top-8 flex items-center">
-        <span className="text-[#F8B64C] text-3xl mr-2">🛍️</span>
-        <h1 className="text-3xl font-bold text-[#333]">Whimsical</h1>
-        {searchCategory && <span className="ml-4 text-lg text-gray-500">Category: {searchCategory}</span>}
+      <div className="absolute top-8 w-full px-6">
+        <div className="flex w-full justify-between items-center">
+          {/* Home button - Left side */}
+          <button
+            className="bg-white shadow-lg rounded-full w-20 h-20 flex items-center justify-center text-gray-700 hover:bg-gray-50 hover:shadow-xl hover:scale-105 transition-all duration-200"
+            onClick={handleBackToHome}
+            aria-label="Home"
+          >
+            <FontAwesomeIcon icon={faHome} size="2x" />
+          </button>
+          
+          {/* Center logo */}
+          <div className="flex items-center">
+            <span className="text-[#F8B64C] text-3xl mr-2">🛍️</span>
+            <h1 className="text-3xl font-bold text-[#333]">Whimsical</h1>
+            {searchCategory && <span className="ml-4 text-lg text-gray-500">Category: {searchCategory}</span>}
+          </div>
+          
+          {/* Cart button - Right side */}
+          <button
+            className="bg-white shadow-lg rounded-full w-20 h-20 flex items-center justify-center text-gray-700 hover:bg-gray-50 hover:shadow-xl hover:scale-105 transition-all duration-200 relative"
+            aria-label="Shopping Cart"
+            onClick={goToCart}
+          >
+            <FontAwesomeIcon icon={faShoppingCart} size="2x" />
+            {cartItems.length > 0 && (
+              <span className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+                {cartItems.reduce((total, item) => total + item.quantity, 0)}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
       
       <div className="relative w-[400px] h-[680px]">
@@ -253,13 +339,6 @@ const Home: NextPage = () => {
           </div>
         )}
       </div>
-      
-      <button
-        className="absolute top-6 right-6 bg-white shadow-md rounded-full px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors z-10"
-        onClick={handleBackToHome}
-      >
-        Back to Home
-      </button>
       
       <footer className="absolute bottom-10 flex items-center justify-center w-full space-x-6">
         {cards.length > 0 && (
